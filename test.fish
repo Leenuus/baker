@@ -1,6 +1,6 @@
 #!/bin/fish
 
-cargo build 2>&1 >/dev/null
+cargo build >/dev/null 2>&1 
 ./target/debug/baker add ./.bashrc
 ./target/debug/baker add ../testrc
 ./target/debug/baker add ./dot_rc
