@@ -18,6 +18,7 @@ use normpath::PathExt as NormalPathExt;
 use relative_path::PathExt;
 use relative_path::RelativePath;
 
+use rusqlite::{params, Connection};
 
 #[derive(Subcommand)]
 #[derive(Debug)]
@@ -26,12 +27,12 @@ enum Commands{
     Init,
     /// add file to local repo
     Add {name: String},
-    /// edit stored files
-    Edit,
-    /// get help of other subcommands
-    Cd,
-    /// load repo to current system
-    Load
+/// edit stored files
+Edit,
+/// get help of other subcommands
+Cd,
+/// load repo to current system
+Load
 }
 
 /// Simple program to greet a person
@@ -46,9 +47,10 @@ const BAKER_ROOT: &'static str = "./.local/baker";
 const REPO_PATH: &'static str = "./.local/baker/repo";
 const BAKER_INDEX: &'static str = "./.local/baker/index";
 
+#[derive(Debug)]
 struct Index{
-    file_name: String,
-    file_path: String
+    baker_path: String,
+    fs_path: String
 }
 
 fn get_home_path() -> PathBuf{
@@ -159,7 +161,7 @@ fn add(name: String){
             if cur_file.is_file() {
                 // if regular file
                 let mut copy_path = get_copy_path(cur_file);
-                
+
                 // create dir to hold the file
                 let copy_root = copy_path.parent().unwrap();
                 fs_err::create_dir_all(copy_root).expect("Fail to create copy");
@@ -181,8 +183,31 @@ fn add(name: String){
 
                 let copy_path = copy_path.relative_to(repo).unwrap();
                 let copy_path = copy_path.to_path(".");
-                let index_entry = format!("\n{}|{}", file_relative_path_to_home.to_str().unwrap(), &copy_path.to_str().unwrap());
-                append_text_file(&index, &index_entry).unwrap();
+
+                let conn = Connection::open(&index).expect("Fail to open index database");
+
+                // ignore re-create table
+                let _ = conn.execute(
+                    "CREATE TABLE files (
+id   INTEGER PRIMARY KEY AUTOINCREMENT,
+baker_path TEXT NOT NULL,
+fs_path TEXT NOT NULL
+)",
+                    (), // empty list of parameters.
+                );
+
+                let index_entry = Index{
+                    baker_path: copy_path.to_str().unwrap().to_string(),
+                    fs_path: file_relative_path_to_home.to_str().unwrap().to_string(),
+                };
+
+                if let Err(e) = conn.execute(
+                    "INSERT INTO files (baker_path, fs_path) VALUES (?1, ?2)",
+                    (&index_entry.baker_path, &index_entry.fs_path),
+                ){
+                    println!("Error happens when inserting entry into index database: {e:?}");
+                }
+                // append_text_file(&index, &index_entry).unwrap();
 
             }else if cur_file.is_dir(){
                 // if dir
